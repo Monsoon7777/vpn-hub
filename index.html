@@ -1039,7 +1039,33 @@
             .topbar-right { width: 100%; }
             .modal { padding: 22px 18px; }
         }
-    </style>
+    
+        .vcard.disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            filter: grayscale(0.2);
+        }
+        .vcard.disabled:hover {
+            transform: none !important;
+            box-shadow: none !important;
+        }
+        .vcard-disabled-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 10px;
+            padding: 5px 9px;
+            border-radius: 8px;
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            color: #fbbf24;
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.35px;
+            text-transform: uppercase;
+        }
+
+</style>
 </head>
 <body>
 
@@ -1258,7 +1284,7 @@
             location.reload();
         }
 
-
+        // ===== Рендер дашборда =====
         function renderDashboard() {
             const { stats, services, faq } = HUB_DATA;
             document.getElementById('vpnCount').textContent = stats.vpnCount;
@@ -1268,25 +1294,41 @@
             grid.innerHTML = '';
             services.forEach(s => {
                 const card = document.createElement('div');
-                card.className = 'vcard';
+                const isDisabled = s.disabled || s.id === 'proxy';
+                card.className = 'vcard' + (isDisabled ? ' disabled' : '');
                 card.style.setProperty('--card-accent', s.accent);
                 card.style.setProperty('--card-glow', s.glow);
                 const iconHtml = s.logo
                     ? `<div class="logo-box">
-                         <img src="${s.logo}" class="logo-img" alt="${s.name}" onerror="this.parentElement.innerHTML='<span class=\\'logo-fallback\\'>${s.icon}</span>'">
+                         <img src="${s.logo}" class="logo-img" alt="${s.name}" onerror="this.parentElement.innerHTML='<span class=\'logo-fallback\'>${s.icon}</span>'">
                        </div>`
                     : `<div class="vcard-icon">${s.icon}</div>`;
+                
+                let badgeHtml = '';
+                if (isDisabled) {
+                    badgeHtml = `<div class="vcard-disabled-badge">⏳ Временно недоступен</div>`;
+                } else if (s.expiryAt) {
+                    badgeHtml = `<div class="vcard-expiry">⚠️ Скоро закончится · <span data-card-timer="${s.id}">14д</span></div>`;
+                }
+
                 card.innerHTML = `
                     ${iconHtml}
                     <div class="vcard-name">${s.name}</div>
                     <div class="vcard-desc">${s.desc}</div>
                     <span class="vcard-tag">${s.tag}</span>
-                    ${s.expiryAt ? `<div class="vcard-expiry">⚠️ Скоро закончится · <span data-card-timer="${s.id}">14д</span></div>` : ''}
-                    <div class="vcard-arrow">→</div>
+                    ${badgeHtml}
+                    <div class="vcard-arrow">${isDisabled ? '🔒' : '→'}</div>
                 `;
-                card.addEventListener('click', () => openModal(s));
+                if (!isDisabled) {
+                    card.addEventListener('click', () => openModal(s));
+                } else {
+                    card.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        showToast('⏳ Раздел «TG-Proxy» временно недоступен');
+                    });
+                }
                 grid.appendChild(card);
-                if (s.expiryAt) {
+                if (s.expiryAt && !isDisabled) {
                     startExpiryTimer(s);
                 }
             });
@@ -1310,6 +1352,7 @@
                 faqSec.appendChild(item);
             });
         }
+
 
         // ===== Флаги: чистая ткань, без древков =====
         function makeFlag(country, fallback) {
