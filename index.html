@@ -1,0 +1,1749 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ VPN HUB</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: #07070d;
+            --bg-2: #0d0d18;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --glass: rgba(255, 255, 255, 0.04);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ===== Фон: плавающие glow-пятна (чистый CSS, легко для батареи) ===== */
+        .bg-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(90px);
+            opacity: 0.4;
+            will-change: transform;
+        }
+        .orb-1 {
+            width: 480px; height: 480px;
+            top: -120px; left: -120px;
+            background: radial-gradient(circle, #22c55e 0%, transparent 70%);
+            animation: drift1 24s ease-in-out infinite;
+        }
+        .orb-2 {
+            width: 420px; height: 420px;
+            bottom: -100px; right: -100px;
+            background: radial-gradient(circle, #38bdf8 0%, transparent 70%);
+            animation: drift2 28s ease-in-out infinite;
+        }
+        .orb-3 {
+            width: 360px; height: 360px;
+            top: 40%; left: 50%;
+            background: radial-gradient(circle, #6366f1 0%, transparent 70%);
+            opacity: 0.25;
+            animation: drift3 32s ease-in-out infinite;
+        }
+        @keyframes drift1 {
+            0%, 100% { transform: translate(0,0) scale(1); }
+            50% { transform: translate(80px, 60px) scale(1.15); }
+        }
+        @keyframes drift2 {
+            0%, 100% { transform: translate(0,0) scale(1); }
+            50% { transform: translate(-90px, -50px) scale(1.2); }
+        }
+        @keyframes drift3 {
+            0%, 100% { transform: translate(-50%, 0) scale(1); }
+            50% { transform: translate(-50%, 40px) scale(0.9); }
+        }
+        .grid-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+            background-size: 44px 44px;
+            mask-image: radial-gradient(circle at center, black 30%, transparent 85%);
+            -webkit-mask-image: radial-gradient(circle at center, black 30%, transparent 85%);
+        }
+        @media (max-width: 768px) {
+            .orb { filter: blur(60px); opacity: 0.3; }
+            .orb-1 { width: 300px; height: 300px; }
+            .orb-2 { width: 280px; height: 280px; }
+            .orb-3 { width: 240px; height: 240px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .orb { animation: none; }
+        }
+
+        /* ===== Layout ===== */
+        .app {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            padding: 24px 20px 60px;
+            display: none;
+        }
+        .app.active { display: block; }
+
+        .wrap {
+            max-width: 1080px;
+            margin: 0 auto;
+        }
+
+        /* ===== Шапка ===== */
+        header.topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 32px;
+            animation: dropIn 0.6s cubic-bezier(0.22,1,0.36,1);
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .brand-mark {
+            width: 46px; height: 46px;
+            display: grid; place-items: center;
+            border-radius: 14px;
+            font-size: 1.5rem;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 0 24px rgba(34,197,94,0.25);
+        }
+        .brand-text h1 {
+            font-size: 1.3rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            line-height: 1.1;
+        }
+        .brand-text span {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .stat-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 14px;
+            border-radius: 12px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        .stat-pill b {
+            color: var(--text);
+            font-weight: 800;
+        }
+        .stat-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 8px #22c55e;
+            animation: pulse 1.8s infinite;
+        }
+        @keyframes pulse {
+            0%,100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .icon-btn {
+            width: 42px; height: 42px;
+            display: grid; place-items: center;
+            border-radius: 12px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: border-color 0.25s, transform 0.25s;
+        }
+        .icon-btn:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255,255,255,0.25);
+        }
+
+        /* ===== Сетка карточек VPN ===== */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 18px;
+        }
+        .vcard {
+            position: relative;
+            padding: 24px;
+            border-radius: 22px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            cursor: pointer;
+            overflow: hidden;
+            transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), border-color 0.35s, box-shadow 0.35s;
+            animation: rise 0.5s cubic-bezier(0.22,1,0.36,1) backwards;
+        }
+        .vcard:nth-child(1) { animation-delay: 0.05s; }
+        .vcard:nth-child(2) { animation-delay: 0.1s; }
+        .vcard:nth-child(3) { animation-delay: 0.15s; }
+        .vcard:nth-child(4) { animation-delay: 0.2s; }
+        .vcard:nth-child(5) { animation-delay: 0.25s; }
+        .vcard:hover {
+            transform: translateY(-5px);
+            border-color: var(--card-accent);
+            box-shadow: 0 18px 40px rgba(0,0,0,0.5), 0 0 30px var(--card-glow);
+        }
+        .vcard::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--card-accent);
+            opacity: 0.8;
+        }
+        .vcard::after {
+            content: '';
+            position: absolute;
+            top: -60px; right: -60px;
+            width: 160px; height: 160px;
+            border-radius: 50%;
+            background: var(--card-glow);
+            filter: blur(50px);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .vcard-icon {
+            font-size: 2.6rem;
+            margin-bottom: 14px;
+            filter: drop-shadow(0 0 16px var(--card-glow));
+            display: inline-block;
+        }
+        /* Стеклянный контейнер для логотипа */
+        .logo-box {
+            width: 64px;
+            height: 64px;
+            border-radius: 18px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 14px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 0 22px var(--card-glow), inset 0 0 12px rgba(255,255,255,0.04);
+            overflow: hidden;
+            position: relative;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .vcard:hover .logo-box {
+            transform: scale(1.06);
+            box-shadow: 0 0 30px var(--card-glow), inset 0 0 14px rgba(255,255,255,0.06);
+        }
+        .logo-img {
+            width: 46px;
+            height: 46px;
+            object-fit: cover;
+            border-radius: 12px;
+            display: block;
+        }
+        .modal-logo-box {
+            width: 72px;
+            height: 72px;
+            margin-bottom: 0;
+            flex: 0 0 72px;
+        }
+        .modal-logo-img {
+            width: 56px !important;
+            height: 56px !important;
+            object-fit: cover !important;
+            border-radius: 14px !important;
+        }
+        .logo-fallback {
+            font-size: 2.4rem;
+            filter: drop-shadow(0 0 10px var(--card-glow));
+        }
+        .vcard-name {
+            font-size: 1.25rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+            letter-spacing: -0.3px;
+        }
+        .vcard-desc {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+        .vcard-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 8px;
+            background: var(--card-glow);
+            color: var(--text);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .vcard-expiry {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 10px;
+            padding: 5px 9px;
+            border-radius: 8px;
+            background: rgba(239,68,68,0.12);
+            border: 1px solid rgba(239,68,68,0.3);
+            color: #fca5a5;
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.35px;
+            text-transform: uppercase;
+        }
+        .expiry-panel {
+            padding: 16px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(239,68,68,0.08));
+            border: 1px solid rgba(239,68,68,0.28);
+            margin-bottom: 22px;
+        }
+        .expiry-label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #fca5a5;
+            margin-bottom: 10px;
+        }
+        .expiry-timer {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .expiry-unit {
+            min-width: 0;
+            padding: 10px 6px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.28);
+            border: 1px solid rgba(255,255,255,0.08);
+            text-align: center;
+        }
+        .expiry-value {
+            display: block;
+            font-size: 1.25rem;
+            font-weight: 900;
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+        }
+        .expiry-unit-label {
+            display: block;
+            margin-top: 4px;
+            font-size: 0.62rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        @media (max-width: 420px) {
+            .expiry-timer { grid-template-columns: repeat(2, 1fr); }
+        }
+        .vcard-arrow {
+            position: absolute;
+            bottom: 22px; right: 22px;
+            font-size: 1.2rem;
+            opacity: 0.5;
+            transition: transform 0.3s, opacity 0.3s;
+        }
+        .vcard:hover .vcard-arrow {
+            transform: translateX(4px);
+            opacity: 1;
+        }
+
+        /* ===== FAQ ===== */
+        .faq-section {
+            margin-top: 44px;
+        }
+        .section-title {
+            font-size: 1.15rem;
+            font-weight: 800;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .faq-item {
+            border-radius: 16px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .faq-q {
+            padding: 16px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            transition: background 0.2s;
+        }
+        .faq-q:hover { background: rgba(255,255,255,0.03); }
+        .faq-q .chev {
+            transition: transform 0.3s;
+            opacity: 0.6;
+        }
+        .faq-item.open .faq-q .chev { transform: rotate(180deg); }
+        .faq-a {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.35s ease;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+        .faq-item.open .faq-a {
+            max-height: 300px;
+        }
+        .faq-a-inner {
+            padding: 0 20px 18px;
+        }
+
+
+        .proxy-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+        .proxy-updated {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+        .proxy-refresh {
+            border: 1px solid var(--glass-border);
+            background: var(--glass);
+            color: var(--text);
+            border-radius: 10px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+        .proxy-ping {
+            color: var(--text-muted);
+            font-size: 0.74rem;
+            margin-top: 3px;
+        }
+        .proxy-status .status-dot.online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+        .proxy-status .status-dot.offline { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+        /* ===== Модалка ===== */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(3, 5, 12, 0.7);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            z-index: 500;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.25s ease;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            width: 100%;
+            max-width: 560px;
+            max-height: 86vh;
+            overflow-y: auto;
+            background: rgba(15, 17, 28, 0.92);
+            border: 1px solid var(--modal-accent, var(--glass-border));
+            border-radius: 24px;
+            padding: 28px;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.7), 0 0 40px var(--modal-glow, transparent);
+            position: relative;
+            animation: modalPop 0.4s cubic-bezier(0.22,1.2,0.36,1);
+        }
+        .modal::-webkit-scrollbar { width: 8px; }
+        .modal::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+        .modal-close {
+            position: absolute;
+            top: 18px; right: 18px;
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--glass-border);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 1.1rem;
+            display: grid; place-items: center;
+            transition: background 0.2s;
+        }
+        .modal-close:hover { background: rgba(255,255,255,0.12); }
+        .modal-head {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 22px;
+            padding-right: 40px;
+        }
+        .modal-icon {
+            font-size: 2.4rem;
+            filter: drop-shadow(0 0 14px var(--modal-glow));
+        }
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+        .modal-sub {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .block {
+            margin-bottom: 22px;
+        }
+        .block-title {
+            font-size: 0.78rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 16px;
+            border-radius: 12px;
+            font-size: 0.86rem;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            border: 1px solid var(--glass-border);
+            background: rgba(255,255,255,0.05);
+            color: var(--text);
+            transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            border-color: var(--modal-accent);
+            box-shadow: 0 0 18px var(--modal-glow);
+        }
+        .btn:active { transform: translateY(0) scale(0.97); }
+        .btn.primary {
+            background: var(--modal-accent);
+            color: #07070d;
+            border-color: var(--modal-accent);
+            font-weight: 800;
+        }
+        .btn.full { flex: 1; justify-content: center; }
+
+        .steps {
+            list-style: none;
+            counter-reset: step;
+        }
+        .steps li {
+            position: relative;
+            padding-left: 36px;
+            margin-bottom: 14px;
+            font-size: 0.92rem;
+            line-height: 1.5;
+            counter-increment: step;
+        }
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0; top: -1px;
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            background: var(--modal-accent);
+            color: #07070d;
+            display: grid; place-items: center;
+            font-size: 0.78rem;
+            font-weight: 900;
+        }
+        .note {
+            background: rgba(0,0,0,0.35);
+            border: 1px dashed var(--glass-border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-size: 0.84rem;
+            line-height: 1.5;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        .sub-box {
+            background: rgba(0,0,0,0.45);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 14px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.76rem;
+            color: #cbd5e1;
+            word-break: break-all;
+            line-height: 1.5;
+            margin-bottom: 14px;
+        }
+
+        /* ===== Серверные плитки ===== */
+        .servers-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .servers-title {
+            font-size: 1.05rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .protocol-pill {
+            font-size: 0.7rem;
+            font-weight: 800;
+            padding: 5px 12px;
+            border-radius: 20px;
+            background: var(--modal-glow, rgba(255,255,255,0.1));
+            color: var(--modal-accent, #fff);
+            border: 1px solid var(--modal-accent, transparent);
+            letter-spacing: 0.3px;
+        }
+        .servers-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+        }
+        @media (max-width: 520px) {
+            .servers-grid { grid-template-columns: 1fr; }
+        }
+        .server-tile {
+            position: relative;
+            padding: 20px;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--glass-border);
+            overflow: hidden;
+            cursor: default;
+            transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), border-color 0.35s, box-shadow 0.35s;
+            animation: tileRise 0.5s cubic-bezier(0.22,1,0.36,1) backwards;
+        }
+        .server-tile:nth-child(1) { animation-delay: 0.05s; }
+        .server-tile:nth-child(2) { animation-delay: 0.13s; }
+        .server-tile:nth-child(3) { animation-delay: 0.21s; }
+        .server-tile:nth-child(4) { animation-delay: 0.29s; }
+        @keyframes tileRise {
+            from { opacity: 0; transform: translateY(24px) scale(0.92); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .server-tile:hover {
+            transform: translateY(-4px);
+            border-color: var(--modal-accent);
+            box-shadow: 0 14px 32px rgba(0,0,0,0.5), 0 0 26px var(--modal-glow);
+        }
+        /* Рекомендуемые серверы — свечение */
+        .server-tile.featured {
+            border-color: var(--modal-accent);
+            background: linear-gradient(135deg, rgba(255,255,255,0.05), var(--modal-glow-soft, rgba(255,255,255,0.02)));
+            box-shadow: 0 0 24px var(--modal-glow);
+        }
+        .server-tile.featured::before {
+            content: '';
+            position: absolute;
+            top: -40px; right: -40px;
+            width: 120px; height: 120px;
+            border-radius: 50%;
+            background: var(--modal-glow);
+            filter: blur(45px);
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        /* ===== Живые флаги — ткань без древков ===== */
+        .server-flag {
+            position: relative;
+            width: 132px;
+            height: 82px;
+            margin: 0 0 14px 0;
+            display: block;
+            perspective: 700px;
+            filter: drop-shadow(0 10px 16px rgba(0,0,0,0.42));
+            overflow: visible;
+        }
+        .flag-cloth {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transform-origin: left center;
+            transform: rotateY(-8deg) rotateZ(-1deg);
+            animation: flagWave 3.2s ease-in-out infinite;
+            transform-style: preserve-3d;
+            border-radius: 3px 9px 9px 3px;
+            overflow: hidden;
+        }
+        .flag-cloth svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            overflow: visible;
+        }
+        .flag-cloth::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(105deg,
+                    rgba(255,255,255,0.28) 0%,
+                    rgba(255,255,255,0.05) 17%,
+                    transparent 34%,
+                    rgba(0,0,0,0.10) 52%,
+                    transparent 68%,
+                    rgba(255,255,255,0.14) 84%,
+                    transparent 100%);
+            mix-blend-mode: overlay;
+            opacity: 0.75;
+            animation: flagShine 3.2s ease-in-out infinite;
+            pointer-events: none;
+        }
+        .flag-cloth::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, rgba(0,0,0,0.16), transparent 18%, transparent 78%, rgba(0,0,0,0.13));
+            pointer-events: none;
+        }
+        @keyframes flagWave {
+            0%, 100% { transform: rotateY(-8deg) rotateZ(-1deg) skewY(0deg) scaleX(1); }
+            25% { transform: rotateY(9deg) rotateZ(1deg) skewY(-1deg) scaleX(0.97); }
+            50% { transform: rotateY(-13deg) rotateZ(-2deg) skewY(1.5deg) scaleX(0.94); }
+            75% { transform: rotateY(7deg) rotateZ(1deg) skewY(-0.8deg) scaleX(0.98); }
+        }
+        @keyframes flagShine {
+            0%, 100% { transform: translateX(-35%); opacity: 0.35; }
+            50% { transform: translateX(35%); opacity: 0.9; }
+        }
+        .server-tile:hover .flag-cloth {
+            animation-duration: 1.8s;
+            filter: brightness(1.08) saturate(1.08);
+        }
+        .server-tile.featured .server-flag {
+            animation: flagFloat 3s ease-in-out infinite;
+        }
+        @keyframes flagFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+        @media (max-width: 520px) {
+            .server-flag { width: 118px; height: 74px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .flag-cloth, .flag-cloth::before, .server-tile.featured .server-flag { animation: none; }
+        }
+        .server-country {
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: -0.2px;
+            margin-bottom: 2px;
+        }
+        .server-city {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+        .server-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 7px;
+            letter-spacing: 0.6px;
+            margin-bottom: 10px;
+        }
+        .badge-star    { background: rgba(234,179,8,0.18);  color: #fbbf24; border: 1px solid rgba(234,179,8,0.4); }
+        .badge-ai      { background: rgba(168,85,247,0.18); color: #c084fc; border: 1px solid rgba(168,85,247,0.4); }
+        .badge-games   { background: rgba(34,197,94,0.18);  color: #4ade80; border: 1px solid rgba(34,197,94,0.4); }
+        .badge-reserve { background: rgba(148,163,184,0.18);color: #cbd5e1; border: 1px solid rgba(148,163,184,0.4); }
+        .badge-speed {
+            border-color: rgba(34,197,94,.35);
+            background: rgba(34,197,94,.12);
+            color: #86efac;
+        }
+
+        .badge-whitelist { background: rgba(56,189,248,0.18); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.4); }
+        .badge-auto      { background: rgba(255,255,255,0.08); color: #e2e8f0; border: 1px solid rgba(255,255,255,0.22); }
+        .server-desc {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+        .servers-tip {
+            margin-top: 16px;
+            background: rgba(0,0,0,0.3);
+            border: 1px dashed var(--modal-accent, var(--glass-border));
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-size: 0.82rem;
+            line-height: 1.5;
+            color: var(--text-muted);
+        }
+
+        .proxy-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+        .proxy-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--glass-border);
+            flex-wrap: wrap;
+        }
+        .proxy-info { min-width: 0; }
+        .proxy-info b { font-size: 0.9rem; display: block; margin-bottom: 2px; }
+        .proxy-host {
+            font-family: 'Courier New', monospace;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+        .proxy-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.72rem;
+            margin-top: 4px;
+        }
+        .status-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+        }
+        .status-dot.online { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+        .status-dot.offline { background: #ef4444; }
+        .status-dot.checking { background: #94a3b8; animation: pulse 1s infinite; }
+        .proxy-actions { display: flex; gap: 8px; }
+
+        /* ===== Toast ===== */
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(15,17,28,0.96);
+            border: 1px solid rgba(34,197,94,0.5);
+            color: var(--text);
+            padding: 14px 22px;
+            border-radius: 14px;
+            font-weight: 700;
+            font-size: 0.88rem;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, transform 0.3s, visibility 0.3s;
+            z-index: 999;
+        }
+        #toast.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* ===== Экран входа ===== */
+        .auth-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: var(--bg);
+        }
+        .auth-screen.hidden { display: none; }
+        .auth-card {
+            width: 100%;
+            max-width: 380px;
+            padding: 36px 30px;
+            border-radius: 26px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+            text-align: center;
+            animation: modalPop 0.5s cubic-bezier(0.22,1.2,0.36,1);
+        }
+        .auth-icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+            filter: drop-shadow(0 0 18px rgba(34,197,94,0.5));
+        }
+        .auth-card h2 {
+            font-size: 1.35rem;
+            font-weight: 800;
+            margin-bottom: 6px;
+            letter-spacing: -0.3px;
+        }
+        .auth-card p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 22px;
+        }
+        .auth-input {
+            width: 100%;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 14px 16px;
+            color: var(--text);
+            font-size: 1rem;
+            text-align: center;
+            outline: none;
+            margin-bottom: 14px;
+            letter-spacing: 1px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .auth-input:focus {
+            border-color: #22c55e;
+            box-shadow: 0 0 16px rgba(34,197,94,0.3);
+        }
+        .auth-input.shake { animation: shake 0.4s ease; }
+        .auth-btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 14px;
+            background: #22c55e;
+            color: #07070d;
+            font-weight: 800;
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(34,197,94,0.4);
+            transition: transform 0.2s, opacity 0.2s;
+        }
+        .auth-btn:hover { transform: translateY(-2px); opacity: 0.92; }
+        .auth-btn:active { transform: scale(0.98); }
+        .auth-error {
+            color: var(--danger);
+            font-size: 0.82rem;
+            margin-top: 10px;
+            min-height: 18px;
+            font-weight: 600;
+        }
+        .auth-loading {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid rgba(7,7,13,0.3);
+            border-top-color: #07070d;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        footer.bot {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 24px;
+            border-top: 1px solid var(--glass-border);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        /* ===== Анимации ===== */
+        @keyframes dropIn {
+            from { opacity: 0; transform: translateY(-14px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes modalPop {
+            from { opacity: 0; transform: scale(0.94) translateY(16px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes shake {
+            0%,100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+
+        @media (max-width: 520px) {
+            header.topbar { flex-direction: column; align-items: flex-start; }
+            .topbar-right { width: 100%; }
+            .modal { padding: 22px 18px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Фоновые эффекты -->
+    <div class="bg-layer">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+    <div class="grid-overlay"></div>
+
+    <!-- Экран входа -->
+    <div class="auth-screen" id="authScreen">
+        <div class="auth-card">
+            <div class="auth-icon">🔐</div>
+            <h2>Закрытый доступ</h2>
+            <p>Введите пароль, чтобы войти в хаб</p>
+            <form id="authForm">
+                <input type="password" class="auth-input" id="authInput" placeholder="Пароль..." autocomplete="current-password">
+                <button type="submit" class="auth-btn" id="authBtn">Войти</button>
+                <div class="auth-error" id="authError"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Приложение -->
+    <div class="app" id="app">
+        <div class="wrap">
+            <header class="topbar">
+                <div class="brand">
+                    <div class="brand-mark">⚡</div>
+                    <div class="brand-text">
+                        <h1>VPN HUB</h1>
+                        <span>Личный центр подписок</span>
+                    </div>
+                </div>
+                <div class="topbar-right">
+                    <div class="stat-pill" id="statVpn">
+                        <span class="stat-dot"></span> <b id="vpnCount">0</b> VPN
+                    </div>
+                    <div class="stat-pill" id="statProxy">
+                        <b id="proxyCount">0</b> прокси
+                    </div>
+                    <button class="icon-btn" id="faqBtn" title="Помощь">❓</button>
+                    <button class="icon-btn" id="logoutBtn" title="Выйти">🚪</button>
+                </div>
+            </header>
+
+            <div class="grid" id="cardsGrid"></div>
+
+            <div class="faq-section" id="faqSection"></div>
+
+            <footer class="bot">
+                VPN HUB • защищённое соединение • 2026
+            </footer>
+        </div>
+    </div>
+
+    <!-- Модалка деталей -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="modal">
+            <button class="modal-close" id="modalClose">✕</button>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        // ===== Состояние =====
+        let HUB_DATA = null;
+
+        // Данные загружаются только после успешной серверной авторизации.
+
+
+        // ===== Утилиты =====
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            clearTimeout(t._timer);
+            t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+        }
+
+        function copyText(text, btn) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('✅ Скопировано в буфер!');
+                if (btn) {
+                    const orig = btn.innerHTML;
+                    btn.innerHTML = '✅ Готово';
+                    setTimeout(() => btn.innerHTML = orig, 1500);
+                }
+            }).catch(() => {
+                // Фолбэк для старых браузеров
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); showToast('✅ Скопировано!'); }
+                catch(e) { showToast('❌ Не удалось скопировать'); }
+                document.body.removeChild(ta);
+            });
+        }
+
+        // ===== Telegram Mini App =====
+        function getTelegramInitData() {
+            return window.Telegram?.WebApp?.initData || '';
+        }
+
+        function telegramReady() {
+            const tg = window.Telegram?.WebApp;
+            if (!tg || !tg.initData) return false;
+            try {
+                tg.ready();
+                tg.expand();
+            } catch (_) {}
+            return true;
+        }
+
+        function authHeaders() {
+            const initData = getTelegramInitData();
+            return initData ? { 'X-Telegram-Init-Data': initData } : {};
+        }
+
+        // ===== Вход / Авторизация =====
+        
+        // ===== Зашифрованные данные сайта (AES-256-GCM) =====
+        const ENCRYPTED_PAYLOAD = {"salt": "e5dc8f69c72a0fd025430ee7a00d656e", "iv": "63ddedfdfdc22588b6f89f93", "authTag": "4764bc31cd2db046cb04468032a2a136", "ciphertext": "d495c2f2bb5eb0e792de31a33160c43802d6b265f431c46068967030643e866724e00b3b2136671cbb625325209f3ae2996a04802f16ce5aaeb49ffa1603137732f6bb2781c5b4ad1b96912c776ff2ef7ec3418239a4ff5d6efefee570d6f97f41c05c79f6d6f2053bcffa53c008ce797e90532b47d35d882a1789e0444978d0246f78a6835791c5058fc8e389b7d46ce6af7e15da027b9e1a006f146c92f65e30cd558457d8d0ee3a5c93c70b89f0e9c3a6286461d20b8435f2a4e4333dbe9ee40f765d7dddfb71e17151ba89f483e18e74a36cdd183ce91a33e942a0b63d3ea862e724a94c3077a73420966f228b6382b1f615f0b1fd6a14e7cf72fd154721032a8aa409512506bc46809149c848ed6acd27ba0fb37bb570d93241a1044d1abf07bddf1b4af494ad559ffc24b0ac8b81f04f6873b834646736ff6555f93b20101ff4a17f3a6aadb0a70a4f35649dd5b098df08622c0af3928f8592d18e46920d1e7420f8d6794e73501b54df87819268f8ad09db7598c3c9b1ec3b422c2c831742069912768527f7d3c10fab45074b64bb5acb30ba24ea42b2e16c2b98f8074fe1d9780cfd92f701e2817df9d35a05f02d560313a527e83326ebfa49881e1f01820bc464d928cc66da5b597dbc4450c316b184fdb18035f71ec050c90df5a4a278346a8e188c073daa2dd4db5ed741956a4a14a81170f1fe386465d1b1706d720c0d7bd24e2fa1d24b457e3ea50b3090d08f9422483121790cb12b1792a83a91a7a5872fd64aaadeafdae9f70d1c96c8953097894bd9153d13a31cd1d0e8bc5367ee5182755967661511e6c28bbf3b45c24412e15af327e4799bc99edf5b7ce20a7d07289c59d15312f5505af1b5522a6a30676c698992e0e77d5ffd9ff2038d221050c55c437f1beada9838b8d6776eebb389379d052b3150f3ae8d9ec7fabcc9c44173f407d975db4def78d584aa2b47d07e6a0f51c7aa4374ee32a823fb835cbb687974b0672c6cd0ba3a43bbc3548b094ae03485bbe3e4cf0598c76f7afdb81131b0d40404dd1286e0bed2a78a24ef0906d5f4add3536dfc38ce353712d1f61097e189e90274df80a8c15cb8cec9e046826cb83e42c1bd4d5b211ace8f1aea4589615a8a09f04730ac5fcf3353f176658b7ba0b362b5256f4a750cd36df2cff2d41f29509e5ecc34d26d09302ebec6aa310f26afffb38766d6ba2d8c33dd259cb4e21bfe56ca78a913042633dac43ad4bc0a68143df810d24916e58a82aa420fc90db8f9f21f4086a125adf31bb8e1fd71b77ae276056db2ce4e1a3ba60aa686c0a1e44b846456bdfeaeeb1472da1d2991482b7f16dd24f6946eef34c6c984909ab797f95416b8ea302ce7912ae43c9a2a71227345b15884f06cdf5251c2e253a3e0257eb5c568af238b50897d5bfb525d5137d33ae09b5c611b5908372a3e8f1f83b14fa9cee38d64f892e7eed46851391d3b6acd8f14973637de7d53eaad40263b9699d7326a7d2d6d076b442eb4beac356da8a86a9324bc48b58e48638bfc6713dd7a88eeec1613559e214663a36bd6270d23f0e7af508bf805bfde073136a819feb5fb4cf3395244d0aabbf9030490c2c94185e6081c5878406c1c14705e9976f6d42c6c193467cac2c29215c25f8d0db9a578a089e7a42047a863fe38166ad150417e0b424e5eaf580eda10c27f84649940ab210d185e3d26f25d92fb87c10fd9592e9531bc1761a36c8cf9b0cfb64de0d13a9bae133e24dc23927cc775a46d2960f5d9599c2e73423dd0dfdfa01d722a6f2ffd6cecb1df8b82648762a5bdbb3d3492ed20fc23bd80cce5026d92a3d652f1b37fdf1acfaca4e9ea96aa6a603484ddfcdf5a2b190fda8a9938e0f04e51e53febc1816053b8d63394bb35d6bf6cb448f1d78c8cf50c0647a229134447f62b602ff1b7ec2fff526db4b99d76ab747681dbdb7116669ab2cc246bbafd46019eeed1d7c97edce51d2abf7a954204855a67ac8118e4f51d5b6b86ac835376f25fd9d30b848a1df431974437eb6324b6612deedccc0e3dfa3bf4dfe6d1d694df981810d127bd9a075f566b9afc344ab1f56050f1a3b2cd42595e2b46a00cb9826927262697538df876bada8867b7d6eb08e51a01bb7974d69e89f8f8199f0844f0aaab660644cbdbd251f6deedec437f2345aa30fe8a7dd99bc4785ed8d3223214b62c83f207fcaa52ca4ca8c3aba865e93355b0070489b1f2801c2dc8284db26596c9bdaf3b62f1dabfa0527b64c92891b17a21a263e1734f438295e5b32a16a1dcd3973dae31b6196e2339a2d362b66f0d70b796bb8e7bb34f91626dd56b45157e537044ef8c8f4259922e59a189ef081018f0cf9d0fd5ead134d401be218a02e524293b32993334b83800286708bb689cb47dd5bf9c5d8fc8a95af78f77d988790b1e9ca7afa8d5c4e318705a8a570297b2634cbba590bdc8bfab5479da2db0cb0797bb75ee4dfae69dfed9c2456bed8fac1c405a0091dd1ceae280a3d8c004b42ed3d908c825dc5528a1cf1a92df6c3c7ede5943b79688f48430cb746935e39b4a933ae0d1df7c0a23b0057d5ea09416cef41a043ee400fe3f52d387fc25c3507857fe9698fb9ee2c33da2eff55ee02ea5698ac0cbfebdec0c0826d655fd3224c3690e1bbf97df613344b2889ed5f308b2554d5e4d32d0547b6e4b3995fc4ba359c9bfb26190674cf8ecd1c660ba60cf3fadf1549246be8f8283f0d9bcf4e04772661c037620c557b0ed0f6bef02026b53a9171dcb059d04b8f0ae0e5969ebfd8f92e986fdddd8376c1cbc755bc6b1daac375d7280ed2bb092c367f93ec08668a2dc9a23132bf4174317904b16d545dbf37e7517198bcda7b00f63f264c33ebd9c267a0effa327f05000ec73642ca6890240496166b2e410f119e4b357785b24c7df97d35e54ad53897425a250f7dbd7c847adf4f9e7dadab4dbcc9cdf8346d848800ef56749b6bee52e012cb2d2f8b83ca35b3ee3cd43e57f1f597278aac32034f4606ca54001de19a85caae5e9d6f95f3a786608d5e6ae60495c7de11cc3c6d090bcf267817cbd24a0a1819999197aa62878b59b3ad2869f9e4b51b65bb6d7cf8ddde0df7f634b966ea2ecdcd5409fa1439b4017a4732775bf175e188274de771bc121bde8e5b1ae61bceb18eba0e388889ca0d34f6dd57bd0d00762aacccbab2b39ec45621370dbe141016b569688d1bc566cb79b2fffaf9f71a1b64521ea374ef108a754218ae671a37003cbb497875cc4e81f2bb175b2f3e81d1a999b49663788956bf5998c4ca908922083404e365db6869e3b437a043387b3f6625e1c152a96d5add7ff09d26032bc6f80e0c6e5a03b80c79ae31b5f86d5b50d14b27339f58cb60f7a9ddec37560cab07a4b8e8ff29185713c2ad2507cdf462d9e7c4161bd138eef39faa2810703664ff27fb85403c8f32a489f9262a5538186dedf657226e45119658508e1170b5affa89f0d28ad0c1b594d5f5fa6c218c4c1c98e6e1c8ab238e7b5356b2dfe6fec45c8f916478d9ace4134d36316a78c7647b7f1ed4a7944c6934d88eeff39c58d46134810472038a5d91fc4f6bfd72b05796d2ba644422173c18be0f66022cef31f0f8dfdf9ad960ac9cefb097761d56d085a1da3c93e6816b3b1ac78c3cb024d3570ac5faed41889ce694664d8d5fef90b2a1f5aa684525d5d6856d22c825526952d13a8b544f6c49c062f8c4f2f190544054dc1bf332c1c8a75cd3ac856caed1c44cfffc2f961c9b331e15aa76a8c1183ed879045b3cd00a8ecf74a600104ea8b5dd5061fb134c29f7149d120029caa4ff214fdd77643333b92ed61a931c95b16a8bd3da49094ff7d375d235c0c2166829b2a583c9101d4b69ab97dcb39eed7081ea0d03f2b9b921a98e5d9584280b03f8df3ea44269df27276021c0fff94b669ae6a149e6ec07b14e4c566a9bb28362b7a1e8fe19dbc5622bfdf87956aff9c305edf8c8dd99f506e0f4cdf3a5b8f37473b5746b162b305735a0e03de08ba73dfb1e67bbcb8899dc18e87c2fe508ddd1cd277e60dd0aa182367a0ade12f40bae3a38b906238fdf8b9fe7f99c0a1712daee4b188f09d916ee6b93bd8249f685a1ba6ce19852a602bef6c7f4916162878c241946e81129b93f9daf2ae0bbcd45de78c7a6ec3b68e2d1427ebd920aff0615d618e71df27a35c9ccf9be6dc183b486493d1dd094bded2d022ce56244cd8760c39735c03d3eff81e194509d2fcd35cf3444c55d865ffc2183f716a33edfbffee7b55cfe2864b7bccd03234623009008fdbd1d10d03e88380561630e6c65bf921ecab925c17257b536de1807cec73d9b96d696e6f541b3495face727d13084ef12c6d1c371ca69ae3b71daede2318fb6472c47e0b0de42c198a70cdbd20a2dbf56546c19f1e39e1bd9186c4cf616515189561f07e4ca0841a47d97ee6427776bbd1dbd2622a3ed984bcd01165ab12beafbb3defcb9b007b0439ea1503878a194aeec8f0ccd203417b53b0c02477af2b279c90e870b56ea07baab6eb3b16c2b48096f357a43b6b7a488de486b57570a3ed3c303954db855fa6d23c4f65ae85adc3194cba3201f41f74df9d9475589b10bffe4eb8c4805b17e0a4ae8718d4d16b49ddd87e8d675609b8cfa3f1539b94b3ebf7c473acee3adfce3341df8b92fc2cb0ea4db40b1398fb8d3a342abf12d7534e0625411f0c34fe19355004f75b0e8496cd89a6e9f425c0d2c601a1b70368175b74e49d20bd7692444402e1abecaeeb2fd130d73fe575c7494b8e9d949c36bc5a59eb5ea6b9c700c333a8693b01dd17ce262cbb9e6ba9c28eea6fca4dafcf1c61f5d960e25d7915c16d7fe5a4cbecc540cfd9bc63b11a9a480523abca89019f3ca61c903e6618bb268c0fa4060f39da4649903ddb02071b73fd33c524084bf0b2a3b07dc853c4a81fb31c1af0e8bf7371ca7ec94cac4d66948684808d59c0c50fa7fb86418cb2190111586466bd161fb85da25dca7c1eaa1a20498f3cd2113dbb655c8a2d1805510fc06d97f2a847578571ea1963a7cd1e7ba39b4a047c6dff854edd333a3112f20575708b4b774a5eae2ae8a97f58a5c8f55f93298d82f2ac08de57ea2bf8e04fccc9b6c2a876f69eef7b66a7d1a800bdfcd653c7047a4ec22ddac011753efdcba68c017eaa8697835aa67d309e146b175cd258a566d2cc8d3d32ca6d51665fe7b0f781c1dd6a0e1d7d92bba39d8c833976aeab61bb4f0d987846579cddbbafade661fd1d9a5285b5ef8b10ffa185a55043baf9f4c07fc9fcf0285f718dd3134ea544edf91d6d99af31e38443d6ba929f5bb819460b80ec8fcc4ec4ba8939f00a5192a5e8838e0e09cd0e3b9d7dd7115946e36700bb2c0816bebec4485bb9047ec09eee7d753a24935d5a7e8ed9d8b31feeb35c9a331e7c91ff1d448595a51cdf5350394906a51bdd38a6490a8815caf471eb8ad68bbd4553f4373101392ba93782ba80ed680c65b600f1cffd797c0a59383e9a74216347f7d5f9285c140655055338186b4cf586367d76c37b8c85d0a52228d0bc14387937c4ebb5afd016fb3a4d93cc3bf8de8355cb28472ce43c80ad8b68e9e32ace0e56d3301ee4bf2cad89764183ccae81248296eff7f758f46a8c6e0538b1a8872099b7d2658ef67795adfc5d7f3a1f3f9e35bf20174bac740752e9c9cc1f688a5550e80f711797fbeae1a94ec558472e9f12168173c4b5b938be91e28c282ac1b6c301cbb9ec6e016b6f51e167a34a890cd5c2d9d13b56ca38d782bf255d8d8e447e9a2db50b310261cfb14821cc5b80e927d37509ad2fc297c09834ff8e7324a83dbb622ba0ec04d523a86e1296efe06478f14258fb0dbeadafc98b8345ebfb563c9994b83e8c0da9b8bf8e18f78d8ec3fc7bcb210d1aa02ff59d8b4400e5968f9d16f3984ff73d0219076f539772c9777da3968196884880c2ecd9b473c2a770583fc6a2d9cd9a5b420988abd29a617eed4682f436ee658044955b2b0d4e6b3dd9d6b9a3a0e374114071c88b03cb0b07c2e0279f5e8d95ac02c2abb9639659ff1df18e20591c58b03612b7ad1bc42c4c4fa77a5ac60f93e6374fc2bde94f522370090b3e3c413bb2dbcd8a4c5d4697badca0a275bafc8f8ecba157377e504d31549d53db741ea9178301ea53c827336ee62a21672d20b4fb3dee29b6bae3e12ea53125f3c7fc0656eb3c3699ada30f39bf0c872de1f497ba51da8ac3d47c969438feca2c15910b17ba2dab5e9b311277d6a942626f9c98ccd84539de192ffd0e1ff1458f4c770c2d51534d5d248d8b821508eb41a93fa3f426722b3c3544c2de3a6dcac5c06e2135713337947591da922bcd377ecd85d4484967021b12a26b292af36402fc608ab218326f555bfe0f81c79ffb83612a3fda46b0b124c82aa1bbd270612fefa28a6ede0780a49d4735b76be828abdc1c5273a36f84c31b71bd9b7a02458b660008ee4109d97fbf05e3eb32b2c18769e64bc8def30f3c9d5f59f52473fb77e544fd22aedca180274b3cdfb63b3218ca22e6c4e15f51f6baeddca2e1f7e1a50ee566dc51ddef8e4ac18e8ca2f016168b88021803863c10cb5cb51f4e47fb00cc996e79dcc00564bbafb40b0db79d5fc51b91b1078b47e479902a9f4a947af9466d3aec25d4b9193084420f2b0cc6e7f7d69fb60a0edaf9f15b262a2fd939c0e02f5b16ef57b250d11ef09b7f58f603eee5371f3625e1ef33899d4772e8a227a1ba7244d7f98f2a99da168ad409846ebc1f3808e325112799f3b0439c976d254b1954255b4a50465c66d2ad8026c38718a531a273fa1bfc5c86296e466d0dcf12686a35f668ea80d10157c22f986a3d789e588df6942f729e20e33dae3e06c2a07ea2713711423542b59a6f53c590084dba2deccb5d726643654b27e663dfdad26741a9318a005410e4036566c7080d45a4d64ac73ea59c5f61a580535df3cc647061726c0129be36ad6be757e39bc0374e721a1961fccc53719ccdc65d999863957b71e7efe2f1402a127298f65cc8726ba12e681fd0ab2e543b34858a66eca705a7c13d73345eefaad477208d74b19af3060dca71a946baee6e6fe6eaa1a39c739f195cb48aed305ba70c37dcddb29d0e725d8588e2578df99866cd55bf97640c4db1182e1f8786e4f2fc3a0d14a5f2d5bf671bf8c0c3092e75733ee77eaa1da72f94adabc1f45d6e5c8e307f4c0eff87b5dddb95e4534e8f5e830bf639005968a345b1bc931619df070c5e64427e91b362905651361277034ea13ec7105d7c0969d440c0e89808f5ea471f96d1cf0ceb2fb058fcba66c98c88c54ff571bd398ac0928f00d1440aa00cfb9f48562df1c5f67b698693d25354edc7f29638bae196919ae2437dbeadf20e5f61f146ca048da93faf71837cc4944cb8bc96fd4572412a8a5e3f6f8994d93271b24f931b35247f70ead00ab7b70b01c5124206fa111393ab018dc936e083b004ddd50a38f198fce8791d622fe60f6a96831cbe00d82c282a67789bfbc13ee74839c322841eb50daf7590d6afa19c32686173e966286ab3b578ba0aa60e39f1fc1cf412b2321a44f9e9a48cc91b1a657350158e9fda4ace206361e840cf037ae1ab79c54b44223dfbabf2d433a5968c9d8d07ed7641b96907d2203d705096ae7a503b95f63e58623a72963a61fb0c9bce882a1ba61a6056c6389fd7026018a314d85e715b69494a3d78d560d3ae69626ebb9d2a378d6808ff717732b2cb9d776db128b634478f1a0ef11c8bc5110821c329121f8bfae5694303e06e238d3c41e38b1785d6758cda7bb510e9b469b80f26d163fcb762cbe3ed8b2e3399cd537fe1c3895e12f840ccda2bc3e7c23a0a5d7c0e6e398a6c806db93fa3877c7123ff0b22e12b3b3d499414023f728efada308c170e02569a163d5afb7bb0776cfbb432f214453e5d2de4c9c5108938f165b8cd3c801041c99fe1455a51e2987f2ffb64944ffbbfbd779d34cf7fa77bbf50c6a360a1c224f3285caba3256e8004b151f625ab0940ff0b7a8144fe4b2fbae0e9c996f470f821c45659668d3ec95c0af1476efb203ab922d2d4405c01fa8115dca1507cbeecb7477e6b21beb6ec4fbbb907e429a0b9b7a6fc56b60cddb5ea1a76ab45b5e64f0092e66c84718de516b65d35db2154a87c6d01a69273fff1bd3b93a5064843e1bb37ae4516e2cc596e0dcec358a644bdb38fd0b6c35ad2cab8cc8ad59f78bd884728ab81b04e904c3b00cf61a7f1a674fc18341aafda4b7e21adc2880e6af79f6b316591e0cafcdbbfbc9aca6d5e0ebe99d3a86b952c5953a53f3ec87168924ed1892a1c86000d423c50298862f5158ae563b926c3ef6b83f7b0f6094242f048ff34ebc89cb4a1deae185942aa70b6339294aa0fba78bbeb767e8df567d92e1fd4004ad63b433de76b221c391ec34843faae8699332deddd78ffbb46126d2af479d78bac5a324e7dee757f2177b2b057b4e6718dc790124d4018586a451933c6642454ffff761a9af52ae3baea2df430282ebede37d9e3b9f2193545fcf7f0b31b3ec968c5ad14e1e26cccbc6469301dd792cc8468abc4a415be3610e0d23e9fb484dace85acd1b67af237b6e1bc4d922ae4098cde017712e2fef76ce76eb9d669b1f812f2d8ecdc6f666315bde2d15b755ec1b461f11a948e55f89af39e82e536599f1450379cf3ce1c9e09f38e1b52310ee3247ee1d855ec53760a0b3f9425edbfd97af6edf46b4bf2e712e410e2f2bf8cd5ac34c0ebeb740a9e0c8654b015665bfa1153b9469049989a069c3196dafb1a9f4ae5b40b324b13a23ab1e3df5f71a51f67cef2775ef691c003648f948f2afee9bea152a1dfbe0fe364506962cab364f0dc1ed6e1972cd2355a60010ddaea72e82a4eb40d7cb36009dda3ea92a145ad7a6d959bb7b2047ebed46d46a3728a3f00542346bc31d15a63813889bbcc72fbc47f459fc3fac1cc0170e552af095bc1ef8c0a65d05318c43958e418d32db50839574d123851dbc14be986bd1df170ed6a2985f93b36b7c92cf5d7aafb3f5f6ce6892f71128141ea4243b231aebeb178ee1e90020396f10439aa9b18ebcecd286457146a8ba60761b2a1caaf01bfc8d2087d8a72404eb9c9d3dad6b0a4c53ffc00f79527a3553e6316a1ddebcb6e9fe4c8bde52ddb8c818a3e77dea272bc52b318a6e8cbe0c3f8d680ae5071c3ae666bb0f964a5330f844fc4136403f829a0f05d1276c0bc15dcc7834b516998b6eecc3eac8af09d354694921f9a613583601cd1c85b163ada09309449cfbec25b7fba533cc807e6ec7761128fef04303265a2987f61fab08e034bc36d8d246c2fac83ff29d0b0e9978db5b8bb751a45b2b48abc33dbfb4ec7b32800c18c2242aa1a2291a0bd1eabc11b82e04fcb2eaaa6eda949dc3f4182876671d70923a042f6c2f25829f174ff0d28b5a138108c0f634d3943fa049e76bc6c591c25b20b7eda13db99bac72a389bd50e298b432b24e57823cada69a423b218fe35c9b653bd02aeb8698c7f052bf198d55dfe5fb1707d3792d8e9c1ea8387d3fd5051390265d730ebff97a07186da4715c5394cdfea72c4e2c4c73d1dbdb7408a4f9872c061dac71ec76cd33a64f3be55ecceb6549c831223ff03651f7fa3ac31ba2f279871fc9047661969276f4f8ea49ab3652fa9127f3aa7a3e07f2ddbec2938924b9c417c90dff4ca50863a91d5078fbcaf79101d7d1d1058cef6ed4f3fd0969d35652864c2941b407aaa58ed7af6a928b90e6a7e1ec1bec38ab67b66baad742ace8a030039d99b9576bfbea91d7c5850f2c04460d86f78af247abaadc7803e1ce0cde64cde2b24e3ed4f8b3dbe1214599dfebf9268848e837f6ac3927d3f37eed163808a051573e187fc3800c7a5d9c289d137475c15950ecb7634f759e49c39d0a0cde6ef0d43c6bca2db12b96c4e4a65a45102525a1b2c30f9871aef399ed741159d0d7c8ba52ad07f2d8b0b4097424a7f2b9fa819f04efc0f5dc46748a9e84a12ace9dce96c492da3a0ed3abd2566d6ab8801ece3034b26c462386b1d1b0d6a2edd4181529a15c0ca8180b6f2d1733c4f9c67dc37b9b6df635ecb6632d346cc10a64d2ea29cd62fc3679b2643f3279b5cb85df83f34d6d6a62ac431ce4c8130ab477337cd2d1dacd6c269cdb54d2bef3adefcf5353c04b0c84fde584eed20d34b8890cef8adb0b06aabc5bc321344c2e5c872d768a97d5185093c232e38d77e8c9aec4ac35029d49436e058e4afe5c61dc3334069f8132fc908d2c1991133ecd05a76111fc383daff8ec3a3e0f0c08963770d1422e73dc44f1e5992d3f379924e3a390f219b69d2ffed6d7babacf882d2739fae631ecbae7a413e17a81d6f5c80770c81175c5a580a7dc76e390f1b9bc2c8e1b59a0bb634a145410fe1eeeb4467a7a4a3389454688a623606cb87ba840c0eba588657ed687ac6368365c198a7df11509e483653ad298ca153d5d69946d39349add3f98767c684595aa1aa5738f0d87448e88cc3f42a2360567940bb195ca4964f3d7e1b4642ccb7c777bef89c7d8fc139fb33b6ed474a4542b1e01b74dd0eaf2c93e3d404682262074a97eb6c83e4e3bcdab569777d77df3c526f9495eb7cf634706c8560a3d7640677344f256510cbdb20f91ecee4067db79c47144d6358dd201050cb97294a26fa6cc0e3708ec25d8af240587447f3130803feb900b6820a45fbf1dc03e64a49685721968ed1f68c60c0ad4ccd2949937c6297891ed8dda02617108253b121109e2153ebc86631504aeac1e406613f7811baa726865f51237c33ce4219b3934d8a2c127ff6ec50ab58d9a20c43c8ad74ff4fcf3fb539bd711c7ff02894331ba074ca10cef9b90c65d44f669881cf40831b72663aa4c950f049f084d1c022a5c8cb092bbfd0304f4755a2440beec2485f9f351babb83e00057e8c0a4a3cc6a45833f0fe7fa2974dc3ebc3601c5904973684f3e6afa81ff2abc4f95b637703a3d82763c2b24cf15bc1028b6b7f29525c74ef9b8e55ff432eea01a13f25d5341da80954d3ff0e22a7cc520f18570c5fbca1fcea37bb9186974320edfbdfb9650b83839c577b0336ff874e6f9767cb4db63341f8d24824c8c0648e70087e65d2fd54472caed44fe5cfab803d57cf7a0c9a76d48788baaceec2c204dbf4b872d97c68492120045aafb6691eab1a3b64523af600df82e76c93548b5e45a7ede0744ebe42541c4b704e07694b79f288493aa50a4d246caf820bcdc58b0412224181b97c026a89eeb2ee43e3f16fcaced25ebb9700c88e51065fc108d70b02b68f014dd227e933516c8dfba913e825c599ff57b0698f970734c863d748d7b18bb7f8676ab38ae27653687cb3bdf0759c04a45adae6acb5da8eed3a1f71ed53be0fe028022be7bde553eeb95b69ff8ea394548fc7b212e8033522948f94bc72af1b0f2e936f7fc8d94520805558fff71cdf8974860ae27501b7cea1fb79343d3822c8da50a9d88eab746aff8a29699a333759e1dd332da73c2114dbd3ba1a188eb777bc4c42b3de0c9ff58e08179cbf83cbf747b4d9ef2291db20ebb290e3f3ce497b169812bbfe747d45c947bb9c6f52a978c25e0dc3489904687edde27f4cfdf4bc85166caac716fecf5ec874600813046b238d4d43685ad6f5972e7d94bd75d4ad0bddbc3e6af893d725b206f002cb2a73e35d309825c2a6b552e4e55a487f37b6e2be51ab58fb86a516b5a3e0098ebba4548d1ae03f0ef43f2e559121187e0815c783cb60f7a49769a520e47ac0e76624c95e7c50dfaf66f68b7663f0cfb9041e2a594b518902556fd60bfc7a6228e094a64ceb678550325be0920b9569d10202e6393d7d4ad5fc552d0e9fbcd55124b52d766c3ca82c57ddd35c9af9934c4a97c2ff6e2c0d3392d709d7de53484b1e48baa0a612d6baf0f76c8f3284aad7d72fa24eb795c1c7bf5b895d76967d55e073ad29d7ecdfc8002cdcd04188e4ca9f2ff45b25ded81aadf217e9815e999a76c44b77cbbe02b95e3876c34e4722ed5a4e6d5cbc28924df8160b50af5701ab24353b8a216b8ff32a9edbd87a4f098094de5d1dfdcf06453984c36bdc45ceb27173dfd98bef1a501371911f7dbe197739c40e50aa5c1461fac07ab490ce035d5db2d64c4c90ce63e99f3695b673404b610a5e22854ce34a11be7af93c52ab38521aaa8578f64c465dffd543498554de18dfccf287426778f1baf81a001ff444629a5aefd288eb38bf47d74abe53e7c7a1905ef3e1d2bf4de06fa4c2f846bdfdc8c141dbf263a765010e4445777284e77fe02d043fd17c64395052721e638577a1a2fb9ca17759a8e4a36e967bb6f6a829031f44b346b0080885a2b62e4fb6f2821cbae37286151579fe4bc4149a459f65b72f7332b8b7a1d73a37426ee4f0544f7aa046b3b5394b3420ee211f882b43ca8269d68dc05db3b0a37c03ab1b978438c9b02cf6c41fcb988305a2a716e8e4e9aafe2fa53de0e98983cc666168e38cb55b494206299e2e26d0e5cf89e93aac613d7647e4727d7be6689d70dd76a92c3196a0b37d55e6c0e9834c491c0c0c231e6382303631015e7165e7cbee094e6e8c7334b80b858f232a82f7c72cd7a688ea2322f339d6977594a403d7b499e8748eed5abd26d6db5ef7e2e06526239c1eac849182a52665440d9e20bbda8f0de32d1409730d8cebc746a635d8d3fd2a867a2457e46465e4624b007b91f7c1171f63243378ee2b410e99c2629539d6d79a223a711f4872b947b9af767acdc3dd028d598bf03601bc94fa065f82027e0e367255bd6255e239af0f1e39cdd2cbc99e50f8d8bbfd08e42564718c87b7aa862c777a936e3403afda35be6e02704f4370a295c0ab25aad8d46a2c4585cdfc3066d5d59e1b4e5398e94581ac7afdab260bfb7da8b95b8cdbfa653f6a852779ca55f13cf5e886ad0395d6c8de74cc1d75e5f1f181047d5f01bc07f4ebdc3dd35acb191c37d268ba7cd0c3af3df4f5e76518e2f3e11ebe66d04d8435e81af96ebf2e8c21f20672e5eacf32efc59fc849ed914a5249733ea950f816cdff2578a415d1529b74e2bcd25f37b7c565817af961a107d16815e514347ba1ff5f0015b244aa8d432956903b45ee7a9ed54bef6e7f03a36c5a7038c6c926d1674cec095fc1ab70c2083e044f6f233c1e5c0047b777dfa1cfc01981709d2681ef46580708f398220196f34f7769b0410f3359183fc3dfb36349d86aa28575a2f938f441d597ffb1a93431523c39af4321e4c2d406ae8a3deb02d65b3a5466a3131ad0013cbcff26a10e6166ef23ab1af7a3af45a2f08ff152485f0e48cd0ff5adb06699dca39ec0826cc50ab83ffd83fdd1f19fc12b0852683a02fb915535595d128f5ec35d40bc1a669608c62767a5578910f7148254267430a1488856d7819a8589bf9c0047c037e7c7d24827f88489a94bcba251f9dbbcac81bcc68c09f8b7fa9ff18630526cddcb4ac00785be9206395cc4160e434846869601a3e9ec469cd63bbb1abae5251f20b052b3cb7ff99f04836bb3e8912c29dc39e81342e18c4e2264ff3cdf6ab0037d82c04d09b391209ad22d25faf60721c9dfa7e67b86ef2b24bb55dd672733bd40a979199611ed915b7028fc0b23123620aff34b8f43a154a97d363505a7ed6751d3c168d181b5873b95ee45247d9b23937a2bd361c4b92a753d6969c94bcd5a8850d74d0db9eb188a137a12c9959c0b1752cee26ad5e733b77764c399815c8493c279a2f597ace122fcfc2f147327a0ece8f1256dd3897ddc540935f3ff80b111de60c1376ef384d1f201201c405c4b5129edf197368c0405e36dcff77b5f17c164962b1476dba1530fec1686ae7d16fbe49c40c57677bb7191b472c6d1aa12e9090a49d55c995272935224e447ce931188341692db05cc5c5c9985e961afb080bc9309a93ef81123b8baf5d254f195638f4b616cfbe2a56bd25a97473c38a5c93c0d2467a02c4fe2c46c8b62e595fc673145def0cc2e109df4b03ef96930966dd0e7cca376cd5c93a4c540ab8b9e9e64ee1be96ec0baa24f33de7b1644f655ad4747e32b7efde7f2183274f76e6a1ef6333fa63782bfde4fb52c770e319d437927ea8c19ee961db11f0c9bba8d880a099baa098c6e66b90301adadb537b2046407f5fcb9696d523a33f3ddc13b2431cfa0651b4669b9781767efeaef50c14be7e95f9af3d487d09908af7c52faccfe7e48f59aaf3af1e69d885a19f5f30935af0c82ff49d37b2f5eecf2fc320ebadf84721ace42c8a4746f9e68608c244ec4a88e1908949fb49fb06369816386f497308a876fa6bf1a719305228e75c037633566baa1ecf5014deaa09ca6700785aa119c3b034f9bef029765e0cec014c59de3c2f33ba57836d1a978dabd10dadf65388b577548f7d724ffe5c1b1981530063cb98a7d968b948922d2f272acd3173acd0a8cfa75ac3b21fe215ec6aadcc7880769026b57580517ce6bc4bd0990005d82ca43ac2d1c6d06f2b9507c1e62290aa60c40afc611e00cc4a558ffecd132ec24d1f83b8d4150fee69d1be26e482a04cfe37e01b9c98b3084eca18d08eeb91ea811153347956ad4e59a9e88290040fa34254f65e42c5583017613ff2efb71b216eda7c1cace11b5eb106ced9da5b777cdab67a9dfe0fa779fb82df0780edc767962df015c8dd79a3e86b991ad6579cf337d65374566e55b295a2ffb7beab4ebfebf9c2ed3f197ea8276a5f7d9c339475392cf4095a0ef00f11de7adc55eb839c53d0379bc4a0a4756665cfb1547081fce47e1e6e62a460460a44d4e333beb587e32155677e0df1c27e9e7100bda3e4a224895cd85a31a1bd80b54b3cd1ece0ba97e5f89b8220d969fee5681bd7f2997abd95a66a4012da2e444e81fa87b63f28f5a25ab3de72cbc7e1165e5a2be0a06a3cb64d0e6b82dd2b87f7a7759ede1436cd0615959e92cea462c5c71105bec1d52173a387b12566fc8347266626ce245f336ac0011a81ef8201045397be4a0db0f2568f503990b28da822b1882a93e352039776341502932d46f78bf96ce7fef7bb3eeab51ef616b3d59cfcf1b8dcacfaf22f5c312d43309b7b6fe727cc359deb3c9a8289917646092b8fc056286032b2c5b1edffb49ffb9586703c2671a1bdfae9864a2d24fbe88bbe92deeaeb550280898d8f8a33a96c666ab43d57ecc8ed162666ac8a3cc0f842c4c45e5bc99a6d752f478a2365946831c9340c6ac9a0c83f81a93a011e6b6120558db2caef7e3e62ca89e7486f8f7336e3823c13a17ce88efb32f965e8bb082938f362879fa76776566871320c1d6b4dd6c58ec247e99a993be6c17bcf495aa3d9179058f6ae547b068b45510e7b99397fba760aeb6547fe17618c8723535619bd9ddbdd8cbc838e26863f9e858edb4eb7f55a822e5d2d49ae324602da7b921ed49ad3c83654359608e9b3404eca077fdfb6d695bef9a5a11c06fb4da8be762e57a191891e1a0d334776ee94df86d88e268aeac665685b693e65d08ba718ac1d04960fe33a12e76fc129334b592bdc7402392680ca4f332c71d9fd880edce94c452553dae3889acc97b999e72040e5b4009572589ec83acc2b6804c3c52edbccba7d0373ce217b99c2ddbef7231b383a7caf268d243acbbdfaafa8835c06224ee30c19b818df57818cfc329125a6bfe0f7a5982ffe8b9ca01a68874ee7b9bf12fb7c26ce5ba640889e1ab9dfd13091967bc11fe6cf98685a5dc62717d9d0ef8de9d724fcfdc09d868a7fd9243cfc243a4aa81d438b25c258a8ff6d5a5d1cc08b755ab6a1c89cab6fca8d2771614e1e85e4c18185f836128261414e2b96eb6d596b666192620491ed344561c397d36f6b281cb08a62f0747b2fc75a8b8d1d17202b9508e106e933c437fba0d25d47fba0f55cbc527824799d902ffdf57ad36fa17bb261f7f64b6a0ccad25ddd21ff2bbe71144c7cfc93d2090711d732d4238b9f5e439473a8a5d74286746bbcff20acb0dde377be84bc2b2c2b965138ba07649c8cd14eccebaf67c566a2bdc4dec6c03456909da6a3435d1cabbc4877501181304c5f9fd82a8c5401421e378d5ed901a9a3562efac1c1679dd28cc07f7b2fb24b43957eaa4e8c0ac97317576f18105e7bc341d7bce4d85e8336100c785117545f5c70b80695e81bbac182a0b1937752249bc5b54b4bd00932a767ee3d899586b5526e560507e484471ec885b7fbbc02fe7ced3471919c1ff02765e463f488460704640e64d3c0ab82a71414ce965277fdd5f90624847c0e3b83afd9d131a033e5374dd22ed6b7b8297b93f23d7735d95e914f5277ff51fe638e7ccfc22274d923198131065743ae8a9ef63217fb26dfebfe25b8d9dc81e80b6bbc85d4f79a28a5e87d74baea2a23c8a47b6e535668dcf8f4dbe3065d593e08ace04f1f678c4eb78dbbaf906ef4ecb652ff545fe6d9be20ceafe40e95a30818860474432276011cad416507f02efed009a36569519f5ce739a7e2fede984400856bb36982a0e75ace2d390b1bf324180085a13116b0515daa723f5c345f647ea287ac2851804f70c35c8e33bea52fe1a98a30670a05faa0a7e34348c268d9f6ab8af93f18e25c9053a481838754740187cc169683e81a5e70a69c1779c563708816ce7400e00314c2b99388cbfff0a2e3456226a4136d8866e12a80ff4274cace0274a4a5c3ff1dcf6f51ee7ab3c5f0e225f013ab3ddf57bf0e20926abff0b7f04fdcdf3409269228f13c7448a9b8b2ea260830643c2f7cc50ca9cbfd02ee8aa978509fca884a4bff9d0a03babba38229796cce1e791d5f0c3497b2b7c58df9f23f5a7ac0f5a16bb64050a40106d8c0949e5dd89d171dc8aaf795d38a1555df6f7679ee20811cf622235ce05664ca29060e3abfe987261a5a3dca5cddb29fa2d7e264cad430ed446b910830da9a7120eb212557226b1f3a522fd68954cb96fa3d6849d2ecd648f0a84b45440432d0ed559e3a7667176d8c74ca9f1e62c7c4c1081d58937acd1d158525d50062bf82462e7e1996799109b4a4a0a85f4b94903544f2130bd25d6053aaffcb1f43e23ad2c0598314e0f74e4a79dcb7157e3dc7173e35f0be6ff5a21d8ee03c4cdf0d6eaadc07f73d151af3f82f21d648b4d426386e1b278605a2e134a24becd82383eeecf69e594f3ce2a2576b7afa6d35422fb5029d08b4e4d3c8a3a0c8369374a5774d2e764c08f49d6e193bc00696d8693ff76c447e8d5671e55a25ec4d813039d8f88fe51908ac9f4fedf560309522cc2141a3094992f6b00fe25a7f7f1d84553a2726c0540a1ddcd1437efd2bc6d41553304a857dba913d64ed8822f98607f7f8e6bf5cbbd6c90bb7c3e47ab0473fa1203084f660021d81f39f21fbac6e646bdb3d8852f7e3a5ee2625823ab9edb2cc677133b9fba23ea13dad06bfbbdda4eadc28be9df55f65dfabe45bfeeb4559db192c31535cdd7a6be500f3f33286d32304d39bc010d343df19c1446382e752ace6223d9f2995e905449508bb65aa78e709dc331922457a7d35684bafc791c7a976846ced0e1c7c308fb09fe943870b3827989e8ea8b088a8b00da4fcef65a0276962adab49a40eaae28afbf365472fd20594a5e7bfed40c7d0a290c54d865da9827cbb20739a96c94bcbc5e8f241eda3d824b45a2653d29582fdebbe4e1e2a49592ba2d93f0c99c3dc58b3ecc076b9b15ddd6e9fae19a3fc6b2370837743b9461ef1838595a952562944a8697119ab771aafc53dba38ccc7cea356f46f7bd1496c725519ca5b323272f27f835422166ebec4bd15c27b30b2748f3e9a626a02c54a30d3ab6d2d369441dd08611d7f1d31f8e27fb666ffb4995e2a2e707f3fab39ea5883730864ee79a8c6fc4cf2476212f843161d38f11110bea8d50317f80e669b5062cf89f8ff5d11e8f931ce75f8f9c1854011380691056b9b3fdf1d8e4cb35bd35120dab5b30befbceaf8034b038a87327e19e38288e9ddf34dd21c54492c4c428db9310a630e5c92f20c29a2edd20d4deb7a9299455ee451508f2fb594463308ad1d961d4dc0a9befdf0d10e93633c8852cdceacb1daf952a869559f089832b864166ee3755be9384e692908a40314369c41de90d1be401e1555fcfc0c69f3f4eef9923894fd31f50e376db87ae18ffe5dc7bcbb696af019c48846ad25507a86401442a21b8defeb55362b6fcb358f333045c0b5dc7381fbf7220146f861d80fc50daefb1d304583f4e5824bb8b1af192ed76f6a515f14692b2ee640c34e7d422f25378afc22726aae9a6d7122a4e120473268b2fc585df07a03d249c412835bdb64e971aea9081f10d44b6ab0e7a8ea9d95f68ffb2558371df6a981ec287f370692a86f4eadad66e1a4818f326b5ebbdef585a5f3764ecfc0535bf0ced0a86091e08744078dafbb8063c32c40389fc07bea7c8eda5e36ff30b332c600fea07af8e7d49d86d342db022391eb902f0fb3db25e57aa04f997566cc7541179d9a575fe696b62fe70415c8b2a2a7531d18cc8b334ef1c9562521ca88add8628fca9f9"};
+
+        function hexToBytes(hex) {
+            const bytes = new Uint8Array(hex.length / 2);
+            for (let i = 0; i < hex.length; i += 2) {
+                bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+            }
+            return bytes;
+        }
+
+        async function decryptHubData(pass, payload) {
+            const enc = new TextEncoder();
+            const salt = hexToBytes(payload.salt);
+            const iv = hexToBytes(payload.iv);
+            const tag = hexToBytes(payload.authTag);
+            const cipher = hexToBytes(payload.ciphertext);
+
+            const baseKey = await window.crypto.subtle.importKey(
+                'raw',
+                enc.encode(pass),
+                { name: 'PBKDF2' },
+                false,
+                ['deriveKey']
+            );
+
+            const aesKey = await window.crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: salt,
+                    iterations: 100000,
+                    hash: 'SHA-256'
+                },
+                baseKey,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['decrypt']
+            );
+
+            const combined = new Uint8Array(cipher.byteLength + tag.byteLength);
+            combined.set(cipher, 0);
+            combined.set(tag, cipher.byteLength);
+
+            const decrypted = await window.crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: iv },
+                aesKey,
+                combined
+            );
+
+            const dec = new TextDecoder();
+            return JSON.parse(dec.decode(decrypted));
+        }
+
+        // ===== Вход / Авторизация =====
+        async function handleAuth(e) {
+            e.preventDefault();
+            const input = document.getElementById('authInput');
+            const errBox = document.getElementById('authError');
+            const btn = document.getElementById('authBtn');
+            const val = input.value;
+            if (!val) { errBox.textContent = 'Введите пароль'; return; }
+            btn.disabled = true;
+            btn.innerHTML = '<span class="auth-loading"></span>';
+            errBox.textContent = '';
+            try {
+                const data = await decryptHubData(val, ENCRYPTED_PAYLOAD);
+                if (!data) throw new Error('Неверный пароль');
+                HUB_DATA = data;
+                sessionStorage.setItem('vpn_hub_cache', JSON.stringify(data));
+                input.value = '';
+                showApp();
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Войти';
+                input.classList.remove('shake'); void input.offsetWidth; input.classList.add('shake');
+                errBox.textContent = '❌ Неверный пароль';
+                input.value = ''; input.focus();
+            }
+        }
+
+        function showApp() {
+            document.getElementById('authScreen').classList.add('hidden');
+            document.getElementById('app').classList.add('active');
+            renderDashboard();
+        }
+
+        async function logout() {
+            sessionStorage.removeItem('vpn_hub_cache');
+            HUB_DATA = null;
+            location.reload();
+        }
+
+
+        function renderDashboard() {
+            const { stats, services, faq } = HUB_DATA;
+            document.getElementById('vpnCount').textContent = stats.vpnCount;
+            document.getElementById('proxyCount').textContent = stats.proxyCount;
+
+            const grid = document.getElementById('cardsGrid');
+            grid.innerHTML = '';
+            services.forEach(s => {
+                const card = document.createElement('div');
+                card.className = 'vcard';
+                card.style.setProperty('--card-accent', s.accent);
+                card.style.setProperty('--card-glow', s.glow);
+                const iconHtml = s.logo
+                    ? `<div class="logo-box">
+                         <img src="${s.logo}" class="logo-img" alt="${s.name}" onerror="this.parentElement.innerHTML='<span class=\\'logo-fallback\\'>${s.icon}</span>'">
+                       </div>`
+                    : `<div class="vcard-icon">${s.icon}</div>`;
+                card.innerHTML = `
+                    ${iconHtml}
+                    <div class="vcard-name">${s.name}</div>
+                    <div class="vcard-desc">${s.desc}</div>
+                    <span class="vcard-tag">${s.tag}</span>
+                    ${s.expiryAt ? `<div class="vcard-expiry">⚠️ Скоро закончится · <span data-card-timer="${s.id}">14д</span></div>` : ''}
+                    <div class="vcard-arrow">→</div>
+                `;
+                card.addEventListener('click', () => openModal(s));
+                grid.appendChild(card);
+                if (s.expiryAt) {
+                    startExpiryTimer(s);
+                }
+            });
+
+            // FAQ
+            const faqSec = document.getElementById('faqSection');
+            faqSec.innerHTML = '<div class="section-title">❓ Частые вопросы</div>';
+            faq.forEach((f, i) => {
+                const item = document.createElement('div');
+                item.className = 'faq-item';
+                item.innerHTML = `
+                    <div class="faq-q">
+                        <span>${f.q}</span>
+                        <span class="chev">▾</span>
+                    </div>
+                    <div class="faq-a"><div class="faq-a-inner">${f.a}</div></div>
+                `;
+                item.querySelector('.faq-q').addEventListener('click', () => {
+                    item.classList.toggle('open');
+                });
+                faqSec.appendChild(item);
+            });
+        }
+
+        // ===== Флаги: чистая ткань, без древков =====
+        function makeFlag(country, fallback) {
+            const c = String(country || '').toLowerCase();
+            const colors = {
+                'германия': ['#111827', '#dc2626', '#facc15'],
+                'нидерланды': ['#dc2626', '#ffffff', '#2563eb'],
+                'польша': ['#ffffff', '#dc2626'],
+                'австрия': ['#dc2626', '#ffffff', '#dc2626'],
+                'финляндия': ['#ffffff', '#2563eb', '#ffffff'],
+            };
+
+            if (c.includes('сша') || c.includes('соединённые штаты') || c.includes('соединенные штаты')) {
+                let stripes = '';
+                for (let i = 0; i < 13; i++) {
+                    stripes += `<rect y="${i * 6.15}" width="132" height="6.15" fill="${i % 2 === 0 ? '#ef4444' : '#fff'}"/>`;
+                }
+                let stars = '';
+                for (let row = 0; row < 5; row++) {
+                    for (let col = 0; col < 6; col++) {
+                        stars += `<circle cx="${7 + col * 9}" cy="${8 + row * 8}" r="1.05" fill="#fff"/>`;
+                    }
+                }
+                return `<div class="flag-cloth"><svg viewBox="0 0 132 82" aria-hidden="true">
+                    ${stripes}<rect width="57" height="43" fill="#1e3a8a"/>${stars}
+                </svg></div>`;
+            }
+
+            const flagKey = Object.keys(colors).find(key => c.includes(key));
+            if (flagKey) {
+                const arr = colors[flagKey];
+                const h = 82 / arr.length;
+                return `<div class="flag-cloth"><svg viewBox="0 0 132 82" aria-hidden="true">
+                    ${arr.map((color, i) => `<rect y="${(i*h).toFixed(2)}" width="132" height="${h.toFixed(2)}" fill="${color}"/>`).join('')}
+                </svg></div>`;
+            }
+
+            // Для служебных карточек оставляем красивый живой глобус вместо эмодзи.
+            if (c.includes('авто')) {
+                return `<div class="flag-cloth"><svg viewBox="0 0 132 82" aria-hidden="true">
+                    <defs><linearGradient id="globeG" x1="0" x2="1"><stop stop-color="#2563eb"/><stop offset=".5" stop-color="#38bdf8"/><stop offset="1" stop-color="#6366f1"/></linearGradient></defs>
+                    <rect width="132" height="82" rx="4" fill="url(#globeG)"/>
+                    <circle cx="66" cy="41" r="25" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2"/>
+                    <path d="M41 41h50M66 16c8 8 12 16 12 25s-4 17-12 25M66 16c-8 8-12 16-12 25s4 17 12 25M47 26c11 5 27 5 38 0M47 56c11-5 27-5 38 0" fill="none" stroke="#fff" stroke-opacity=".65" stroke-width="1.5"/>
+                </svg></div>`;
+            }
+
+            return `<div class="flag-cloth"><svg viewBox="0 0 132 82" aria-hidden="true">
+                <rect width="132" height="82" rx="4" fill="#334155"/>
+                <text x="66" y="51" text-anchor="middle" font-size="34">${fallback || '🌐'}</text>
+            </svg></div>`;
+        }
+
+        // ===== Таймер окончания подписки =====
+        function formatCountdown(ms) {
+            const total = Math.max(0, Math.floor(ms / 1000));
+            const days = Math.floor(total / 86400);
+            const hours = Math.floor((total % 86400) / 3600);
+            const minutes = Math.floor((total % 3600) / 60);
+            const seconds = total % 60;
+            return {
+                days: String(days).padStart(2, '0'),
+                hours: String(hours).padStart(2, '0'),
+                minutes: String(minutes).padStart(2, '0'),
+                seconds: String(seconds).padStart(2, '0')
+            };
+        }
+
+        function startExpiryTimer(s) {
+            if (!s.expiryAt) return;
+
+            const update = () => {
+                const left = new Date(s.expiryAt).getTime() - Date.now();
+                const data = formatCountdown(left);
+
+                const cardTimer = document.querySelector(`[data-card-timer="${s.id}"]`);
+                if (cardTimer) {
+                    cardTimer.textContent = left > 0
+                        ? `${data.days}д ${data.hours}ч ${data.minutes}м`
+                        : 'истёк';
+                }
+
+                const modalTimer = document.querySelector(`[data-modal-timer="${s.id}"]`);
+                if (modalTimer) {
+                    modalTimer.querySelector('[data-unit="days"]').textContent = data.days;
+                    modalTimer.querySelector('[data-unit="hours"]').textContent = data.hours;
+                    modalTimer.querySelector('[data-unit="minutes"]').textContent = data.minutes;
+                    modalTimer.querySelector('[data-unit="seconds"]').textContent = data.seconds;
+                    const label = modalTimer.querySelector('.expiry-label');
+                    if (label) label.textContent = left > 0 ? '⚠️ Подписка скоро закончится' : '❌ Подписка закончилась';
+                }
+            };
+
+            update();
+            clearInterval(s._expiryTimer);
+            s._expiryTimer = setInterval(update, 1000);
+        }
+
+        function makeExpiryPanel(s) {
+            return `
+                <div class="expiry-panel" data-modal-timer="${s.id}">
+                    <div class="expiry-label">⚠️ Подписка скоро закончится</div>
+                    <div class="expiry-timer">
+                        <div class="expiry-unit"><span class="expiry-value" data-unit="days">00</span><span class="expiry-unit-label">дней</span></div>
+                        <div class="expiry-unit"><span class="expiry-value" data-unit="hours">00</span><span class="expiry-unit-label">часов</span></div>
+                        <div class="expiry-unit"><span class="expiry-value" data-unit="minutes">00</span><span class="expiry-unit-label">минут</span></div>
+                        <div class="expiry-unit"><span class="expiry-value" data-unit="seconds">00</span><span class="expiry-unit-label">секунд</span></div>
+                    </div>
+                </div>
+            `;
+        }
+
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({
+                '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+            }[ch]));
+        }
+
+        function renderProxyRows(list) {
+            if (!Array.isArray(list) || !list.length) {
+                return '<div class="note">Пока не найдено рабочих MTProto. Нажмите «Обновить» позже.</div>';
+            }
+            return list.map((p, i) => {
+                const status = p.status === 'online' ? 'online' : (p.status === 'offline' ? 'offline' : 'checking');
+                const statusText = status === 'online' ? 'онлайн' : (status === 'offline' ? 'офлайн' : 'проверка...');
+                const ping = Number.isFinite(Number(p.ping)) ? `${Math.round(Number(p.ping))} ms` : '—';
+                const url = escapeQuote(p.url || '');
+                return `
+                    <div class="proxy-row">
+                        <div class="proxy-info">
+                            <b>🔌 Прокси #${i + 1}</b>
+                            <div class="proxy-host">${escapeHtml(p.server)}:${escapeHtml(p.port)}</div>
+                            <div class="proxy-status">
+                                <span class="status-dot ${status}" id="pstat-${i}"></span>
+                                <span id="pstatxt-${i}">${statusText}</span>
+                            </div>
+                            <div class="proxy-ping" id="pping-${i}">Пинг: ${ping}</div>
+                        </div>
+                        <div class="proxy-actions">
+                            <a href="${url}" class="btn primary">⚡ Подключить</a>
+                            <button class="btn" onclick="copyText('${url}', this)">📋</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function refreshProxyData() {
+            const grid = document.getElementById('proxyGrid');
+            const updated = document.getElementById('proxyUpdated');
+            const refreshBtn = document.getElementById('proxyRefresh');
+            if (!grid) return;
+
+            if (refreshBtn) {
+                refreshBtn.disabled = true;
+                refreshBtn.textContent = '⏳ Обновляю...';
+            }
+            if (updated) updated.textContent = 'Получаю актуальные MTProto...';
+
+            try {
+                const updateRes = await fetch('/.netlify/functions/update-proxies', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                    body: '{}',
+                    cache: 'no-store'
+                });
+
+                let updateJson = null;
+                try { updateJson = await updateRes.json(); } catch (_) {}
+
+                if (!updateRes.ok) {
+                    throw new Error(updateJson?.error || `Обновление: HTTP ${updateRes.status}`);
+                }
+
+                const res = await fetch('/api/proxy-status', {
+                    credentials: 'same-origin',
+                    headers: authHeaders(),
+                    cache: 'no-store'
+                });
+                const json = await res.json();
+                if (!res.ok || !json.ok || !json.data) {
+                    throw new Error(json.error || `Статус: HTTP ${res.status}`);
+                }
+
+                const list = Array.isArray(json.data.proxies) ? json.data.proxies : [];
+                const proxyService = HUB_DATA?.services?.find(s => s.type === 'proxy');
+                if (proxyService) proxyService.proxies = list;
+
+                grid.innerHTML = renderProxyRows(list);
+                if (updated) {
+                    const t = json.data.checkedAt || json.data.updatedAt;
+                    updated.textContent = t
+                        ? `Найдено рабочих: ${list.length}. Проверено: ${new Date(t).toLocaleString('ru-RU')}`
+                        : `Найдено рабочих: ${list.length}`;
+                }
+
+                if (HUB_DATA?.stats) {
+                    HUB_DATA.stats.proxyCount = list.length;
+                    const pill = document.getElementById('proxyCount');
+                    if (pill) pill.textContent = list.length;
+                }
+            } catch (e) {
+                if (updated) updated.textContent = 'Ошибка: ' + (e?.message || 'неизвестная ошибка');
+            } finally {
+                if (refreshBtn) {
+                    refreshBtn.disabled = false;
+                    refreshBtn.textContent = '↻ Обновить прокси';
+                }
+            }
+        }
+
+        function startProxyAutoRefresh() {
+            clearInterval(window._proxyRefreshTimer);
+            window._proxyRefreshTimer = setInterval(() => {
+                if (document.getElementById('proxyGrid')) refreshProxyData();
+            }, 5 * 60 * 1000);
+        }
+
+        // ===== Модалка =====
+        function openModal(s) {
+            const overlay = document.getElementById('modalOverlay');
+            const modal = document.getElementById('modal');
+            const body = document.getElementById('modalBody');
+
+            modal.style.setProperty('--modal-accent', s.accent);
+            modal.style.setProperty('--modal-glow', s.glow);
+
+            const modalIconHtml = s.logo
+                ? `<div class="logo-box modal-logo-box">
+                     <img src="${s.logo}" class="logo-img modal-logo-img" alt="${s.name}" onerror="this.parentElement.innerHTML='<span class=\\'logo-fallback\\' style=\\'font-size:2.6rem\\'>${s.icon}</span>'">
+                   </div>`
+                : `<div class="modal-icon">${s.icon}</div>`;
+
+            let content = `
+                <div class="modal-head">
+                    ${modalIconHtml}
+                    <div>
+                        <div class="modal-title">${s.name}</div>
+                        <div class="modal-sub">${s.desc}</div>
+                    </div>
+                </div>
+            `;
+
+            if (s.type === 'client') {
+                // Клиент: скачивание + инструкция
+                content += `
+                    <div class="block">
+                        <div class="block-title">Скачать приложение</div>
+                        <div class="btn-row">
+                            ${s.links.map(l => `<a href="${l.url}" target="_blank" class="btn">${l.label}</a>`).join('')}
+                        </div>
+                    </div>
+                    <div class="block">
+                        <div class="block-title">Инструкция — ${s.steps.length} шага</div>
+                        <ol class="steps">
+                            ${s.steps.map(st => `<li>${st}</li>`).join('')}
+                        </ol>
+                        ${s.note ? `<div class="note">💡 ${s.note}</div>` : ''}
+                    </div>
+                `;
+            } else if (s.type === 'subscription') {
+                // Подписка
+                if (s.expiryAt) {
+                    content += makeExpiryPanel(s);
+                }
+                content += `
+                    <div class="block">
+                        <div class="block-title">Ссылка подписки</div>
+                        ${s.pending
+                            ? `<div class="sub-box">Ссылка будет добавлена после получения доступа.</div>`
+                            : `<div class="sub-box">${s.url}</div>
+                               <div class="btn-row">
+                                   <button class="btn full" onclick="copyText('${escapeQuote(s.url)}', this)">📋 Скопировать</button>
+                               </div>`
+                        }
+                    </div>
+                    ${s.imports && s.imports.length ? `
+                    <div class="block">
+                        <div class="block-title">Авто-импорт в приложение</div>
+                        <div class="btn-row">
+                            ${s.imports.map(im => `<a href="${im.url}" class="btn primary">⚡ ${im.label}</a>`).join('')}
+                        </div>
+                    </div>` : ''}
+                `;
+
+                // Рекомендуемые серверы
+                if (s.servers) {
+                    const modalAccent = s.accent;
+                    const modalGlow = s.glow;
+                    // Мягкий вариант glow-цвета для градиента
+                    const softGlow = modalGlow.replace(/0\.\d+\)/, '0.06)');
+                    content += `
+                    <div class="block">
+                        <div class="servers-head">
+                            <div class="servers-title">🌍 Рекомендуемые серверы</div>
+                            ${s.servers.protocol ? `<span class="protocol-pill">${s.servers.protocol}</span>` : ''}
+                        </div>
+                        <div class="servers-grid" style="--modal-glow-soft: ${softGlow};">
+                            ${s.servers.items.map(sv => `
+                                <div class="server-tile ${sv.featured ? 'featured' : ''}" style="--modal-glow-soft: ${softGlow};">
+                                    <div class="server-flag">${makeFlag(sv.country, sv.flag)}</div>
+                                    <div class="server-country">${sv.country}</div>
+                                    <div class="server-city">${sv.city}</div>
+                                    ${sv.badge ? `<span class="server-badge badge-${sv.badge.type}">${badgeIcon(sv.badge.type)} ${sv.badge.text}</span>` : ''}
+                                    <div class="server-desc">${sv.desc}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        ${s.servers.tip ? `<div class="servers-tip">💡 <b>Совет:</b> ${s.servers.tip}</div>` : ''}
+                    </div>
+                    `;
+                }
+
+                content += `${s.note ? `<div class="note">💡 ${s.note}</div>` : ''}`;
+            } else if (s.type === 'proxy') {
+                // Динамические MTProto-прокси загружаются только после авторизации.
+                const list = Array.isArray(s.proxies) ? s.proxies : [];
+                content += `
+                    <div class="block">
+                        <div class="proxy-toolbar">
+                            <div>
+                                <div class="block-title" style="margin-bottom:4px;">Telegram-прокси</div>
+                                <div class="proxy-updated" id="proxyUpdated">загрузка актуального списка...</div>
+                            </div>
+                            <button class="proxy-refresh" id="proxyRefresh">↻ Обновить</button>
+                        </div>
+                        <div class="proxy-grid" id="proxyGrid">
+                            ${renderProxyRows(list)}
+                        </div>
+                    </div>
+                    <div class="note">💡 Пинг проверяется сервером по TCP-доступности MTProto. Автоматическая перепроверка выполняется примерно раз в 5 минут, пока окно прокси открыто.</div>
+                `;
+            }
+
+            body.innerHTML = content;
+            overlay.classList.add('show');
+
+            if (s.expiryAt) {
+                startExpiryTimer(s);
+            }
+
+            // Серверная проверка всех актуальных MTProto.
+            if (s.type === 'proxy') {
+                refreshProxyData();
+                const refreshBtn = document.getElementById('proxyRefresh');
+                if (refreshBtn) refreshBtn.addEventListener('click', refreshProxyData);
+                startProxyAutoRefresh();
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('show');
+        }
+
+        function escapeQuote(str) {
+            return String(str).replace(/'/g, "\\'");
+        }
+
+        // Иконки для бейджей серверов
+        function badgeIcon(type) {
+            const icons = {
+                star: '⭐',
+                ai: '🤖',
+                games: '🎮',
+                reserve: '🔄',
+                whitelist: '💙',
+                auto: '↔️'
+            };
+            return icons[type] || '';
+        }
+
+        // ===== Проверка статуса прокси (HTTP, с оговорками) =====
+        function checkProxyStatus(host, index) {
+            const dot = document.getElementById(`pstat-${index}`);
+            const txt = document.getElementById(`pstatxt-${index}`);
+            if (!dot || !txt) return;
+
+            const done = (status) => {
+                if (status === 'online') {
+                    dot.className = 'status-dot online';
+                    txt.textContent = 'онлайн';
+                } else {
+                    dot.className = 'status-dot offline';
+                    txt.textContent = 'офлайн / недоступен для проверки';
+                }
+            };
+
+            const img = new Image();
+            let finished = false;
+            const finish = (st) => { if (!finished) { finished = true; done(st); } };
+
+            img.onload = () => finish('online');
+            img.onerror = () => finish('online'); // сервер ответил — значит жив
+            setTimeout(() => finish('offline'), 4500);
+
+            try {
+                img.src = `https://${host}/favicon.ico?_=${Date.now()}`;
+            } catch (e) {
+                finish('offline');
+            }
+        }
+
+        // ===== Инициализация =====
+        document.getElementById('authForm').addEventListener('submit', handleAuth);
+        document.getElementById('logoutBtn').addEventListener('click', logout);
+        document.getElementById('faqBtn').addEventListener('click', () => {
+            document.getElementById('faqSection').scrollIntoView({ behavior: 'smooth' });
+        });
+        document.getElementById('modalClose').addEventListener('click', closeModal);
+        document.getElementById('modalOverlay').addEventListener('click', (e) => {
+            if (e.target.id === 'modalOverlay') closeModal();
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+        // Инициализация Telegram Mini App.
+        telegramReady();
+
+        // Восстановление HttpOnly-сессии или показ формы входа.
+        
+        // Проверка сохраненной сессии
+        (function() {
+            try {
+                const cached = sessionStorage.getItem('vpn_hub_cache');
+                if (cached) {
+                    HUB_DATA = JSON.parse(cached);
+                    showApp();
+                    return;
+                }
+            } catch (_) {}
+            document.getElementById('authScreen').classList.remove('hidden');
+            document.getElementById('app').classList.remove('active');
+        })();
+    </script>
+</body>
+</html>
